@@ -1,9 +1,25 @@
 from random import uniform, sample
 from numpy import *
 from copy import deepcopy
+import time
 
 class TransE:
-    def __init__(self, entityList, relationList, tripleList, margin = 1, learingRate = 0.00001, dim = 10, L1 = True):
+    def __init__(self,trainFilePath, entityList, relationList, tripleList, margin = 1, learingRate = 0.01, dim = 50, L1 = True):
+        
+        """ 初始化TransE
+        :param trainFilePath  训练文件的存放位置
+        :param entityList     所有 entity 列表
+        :param relationList   所有 relation 列表
+        :param tripleList     用作训练的 所有 Fact (head, tail, relation)
+        :param margin         ？？？
+        :param learingRate    用作 SGD 的学习率
+        :param dim            投影空间的维数 (默认为10，但是代码实际为100)
+        :param L1             计算L1距离？？？
+        """
+        
+        
+        
+        self.trainFilePath = trainFilePath
         self.margin = margin
         self.learingRate = learingRate
         self.dim = dim#向量维度
@@ -43,8 +59,15 @@ class TransE:
         self.relationList = relationVectorList
 
     def transE(self, cI = 20):
+
         print("训练开始")
+
+        start_time = time.time()
+        
+        loss_record = open('loss_record.txt','w+')
+
         for cycleIndex in range(cI):
+
             Sbatch = self.getSample(150)
             Tbatch = []#元组对（原三元组，打碎的三元组）的列表 ：{((h,r,t),(h',r,t'))}
             for sbatch in Sbatch:
@@ -53,11 +76,17 @@ class TransE:
                     Tbatch.append(tripletWithCorruptedTriplet)
             self.update(Tbatch)
             if cycleIndex % 100 == 0:
-                print("第%d次循环"%cycleIndex)
-                print(self.loss)
-                self.writeRelationVector("c:\\relationVector.txt")
-                self.writeEntilyVector("c:\\entityVector.txt")
+                print("第 %d 次循环"%cycleIndex)
+
+                self.writeRelationVector("%srelationVector.txt"%self.trainFilePath)
+                self.writeEntilyVector("%sentityVector.txt"%self.trainFilePath)
+
+                print("loss 分值:%f"%self.loss)
+                loss_record.write(str(self.loss)+"\n")
                 self.loss = 0
+
+        loss_record.close()
+        print('\tTotal Train Time: %f'%(time.time()-start_time))
 
     def getSample(self, size):
         return sample(self.tripleList, size)
@@ -107,6 +136,9 @@ class TransE:
                 distTriplet = distanceL2(headEntityVectorBeforeBatch, tailEntityVectorBeforeBatch, relationVectorBeforeBatch)
                 distCorruptedTriplet = distanceL2(headEntityVectorWithCorruptedTripletBeforeBatch, tailEntityVectorWithCorruptedTripletBeforeBatch ,  relationVectorBeforeBatch)
             eg = self.margin + distTriplet - distCorruptedTriplet
+            #print('\tGOOD:  %f'%distTriplet)
+            #print('\tWRONG: %f'%distCorruptedTriplet)
+            #print('\t eg = %f'%eg)
             if eg > 0: #[function]+ 是一个取正值的函数
                 self.loss += eg
                 if self.L1:
@@ -215,17 +247,30 @@ def openTrain(dir,sp="\t"):
     return num, list
 
 if __name__ == '__main__':
-    dirEntity = "C:\\data\\entity2id.txt"
+    
+    openFilePath = './data/FB15k/'
+    trainFilePath = './train/FB15k/'
+    saveFilePath = './results/FB15K/'
+
+    # 获取 所有 entity 存入 entityList 中
+    dirEntity = "%sentity2id.txt"%openFilePath
     entityIdNum, entityList = openDetailsAndId(dirEntity)
-    dirRelation = "C:\\data\\relation2id.txt"
+
+    # 获取 所有 relation 存入 relationList 中
+    dirRelation = "%srelation2id.txt"%openFilePath
     relationIdNum, relationList = openDetailsAndId(dirRelation)
-    dirTrain = "C:\\data\\train.txt"
+
+    # 获取 所有 训练数据所表示的Fact 存入 tripleList 中
+    # 其中 Fact的格式为 (head, tail, relation)
+    dirTrain = "%strain.txt"%openFilePath
     tripleNum, tripleList = openTrain(dirTrain)
+
     print("打开TransE")
-    transE = TransE(entityList,relationList,tripleList, margin=1, dim = 100)
+    transE = TransE(trainFilePath,entityList,relationList,tripleList, margin=1, dim = 100)
     print("TranE初始化")
     transE.initialize()
-    transE.transE(15000)
-    transE.writeRelationVector("c:\\relationVector.txt")
-    transE.writeEntilyVector("c:\\entityVector.txt")
-
+    transE.transE(1000)
+    #transE.writeRelationVector("%srelationVector.csv"%saveFilePath)
+    #transE.writeEntilyVector("%sentityVector.txt"%saveFilePath)
+    
+    print("DOWN...")
